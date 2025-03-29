@@ -797,6 +797,12 @@ void IGDBLList(DBLList& dbl, const std::vector<ClassInfo::ObjectMember>& members
 {
 	size_t memberIndex = 0;
 	std::optional<int> nextComponentIndex = (components && !components->empty()) ? std::make_optional(0) : std::nullopt;
+	
+	const bool memberListMatching = members.size() == dbl.entries.size();
+	if (!memberListMatching) {
+		ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "The properties do not match with the class and routines!");
+	}
+	
 	ImGui::InputScalar("DBL Flags", ImGuiDataType_U32, &dbl.flags);
 	for (auto e = dbl.entries.begin(); e != dbl.entries.end(); e++)
 	{
@@ -833,6 +839,7 @@ void IGDBLList(DBLList& dbl, const std::vector<ClassInfo::ObjectMember>& members
 				routstr = std::move(updatedRouteString);
 			}
 			ImGui::SameLine(0.0);
+			ImGui::BeginDisabled(!memberListMatching);
 			if (ImGui::Button("X")) {
 				const int startIndex = component.startIndex;
 				const int numElements = component.numElements;
@@ -859,6 +866,7 @@ void IGDBLList(DBLList& dbl, const std::vector<ClassInfo::ObjectMember>& members
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Remove routine");
 			}
+			ImGui::EndDisabled();
 		}
 
 		if (mem->isProtected)
