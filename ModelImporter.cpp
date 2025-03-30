@@ -33,7 +33,7 @@ static_assert(sizeof(BonePre) == 0x4C);
 
 static std::string ShortenTextureName(std::string_view fullName)
 {
-	return std::filesystem::path(fullName).stem().string();
+	return std::filesystem::u8path(fullName).stem().u8string();
 }
 
 static uint32_t GetTextureFromAssimp(const aiTexture* atex, std::string_view name)
@@ -110,7 +110,7 @@ std::optional<std::pair<Mesh, std::optional<Chunk>>> ImportWithAssimp(const std:
 			else
 			{
 				// sorry, but the texture is in another file
-				std::filesystem::path texpath = std::filesystem::path(std::string_view{ aiTexName.data, aiTexName.length });
+				std::filesystem::path texpath = std::filesystem::u8path(std::string_view{ aiTexName.data, aiTexName.length });
 				texpath = filename.parent_path() / texpath.relative_path();
 				std::string name = ShortenTextureName({ aiTexName.data, aiTexName.length });
 				if (Chunk* chk = FindTextureChunkByName(g_scene, name).first) {

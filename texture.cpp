@@ -166,8 +166,8 @@ void ImportTexture(uint8_t* pixels, int width, int height, std::string_view name
 void ImportTexture(const std::filesystem::path& filepath, Chunk& chk, Chunk& dxtchk, int texid)
 {
 	int width, height, channels;
-	uint8_t* pixels = stbi_load(filepath.string().c_str(), &width, &height, &channels, 4);
-	std::string name = filepath.stem().string();
+	uint8_t* pixels = stbi_load(filepath.u8string().c_str(), &width, &height, &channels, 4);
+	std::string name = filepath.stem().u8string();
 	ImportTexture(pixels, width, height, name, chk, dxtchk, texid);
 	stbi_image_free(pixels);
 }
@@ -217,7 +217,7 @@ void ExportTexture(Chunk* texChunk, const std::filesystem::path& filepath)
 	const TexInfo* ti = (const TexInfo*)texChunk->maindata.data();
 	auto rgba = ConvertTextureToRGBA8(texChunk);
 	assert(rgba.size() > 0);
-	stbi_write_png(filepath.string().c_str(), ti->width, ti->height, 4, rgba.data(), 0);
+	stbi_write_png(filepath.u8string().c_str(), ti->width, ti->height, 4, rgba.data(), 0);
 }
 
 std::vector<uint8_t> ExportTextureToPNGInMemory(Chunk* texChunk)

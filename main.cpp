@@ -948,7 +948,7 @@ void IGDBLList(DBLList& dbl, const std::vector<ClassInfo::ObjectMember>& members
 					auto fpath = GuiUtils::OpenDialogBox("PNG Image\0*.png\0\0\0\0", "png");
 					if (!fpath.empty()) {
 						int impWidth, impHeight, impChannels;
-						auto image = stbi_load(fpath.string().c_str(), &impWidth, &impHeight, &impChannels, 4);
+						auto image = stbi_load(fpath.u8string().c_str(), &impWidth, &impHeight, &impChannels, 4);
 						data = SplitDblImage((uint32_t*)image, impWidth, impHeight);
 						width = impWidth;
 						height = impHeight;
@@ -967,7 +967,7 @@ void IGDBLList(DBLList& dbl, const std::vector<ClassInfo::ObjectMember>& members
 						auto fpath = GuiUtils::SaveDialogBox("PNG Image\0*.png\0\0\0\0", "png", fname.c_str());
 						if (!fpath.empty()) {
 							auto image = UnsplitDblImage(selobj, data.data(), format, width, height, opacity);
-							stbi_write_png(fpath.string().c_str(), width, height, 4, image.data(), 0);
+							stbi_write_png(fpath.u8string().c_str(), width, height, 4, image.data(), 0);
 						}
 					}
 					GLuint tex = GetDblImageTexture(selobj, data.data(), format, width, height, opacity, refresh);
@@ -1581,7 +1581,7 @@ void IGTextures()
 		Chunk* palchk = FindTextureChunk(g_scene, curtexid).first;
 		if (palchk) {
 			TexInfo* ti = (TexInfo*)palchk->maindata.data();
-			auto fpath = GuiUtils::SaveDialogBox("PNG Image\0*.png\0\0\0\0", "png", ti->getName());
+			auto fpath = GuiUtils::SaveDialogBox("PNG Image\0*.png\0\0\0\0", "png", std::filesystem::u8path(ti->getName()));
 			if (!fpath.empty()) {
 				ExportTexture(palchk, fpath);
 			}
@@ -1599,7 +1599,7 @@ void IGTextures()
 					sprintf_s(tbuf, "NoName%04X", ti->id);
 					name = tbuf;
 				}
-				ExportTexture(&chk, dirpath / (name + ".png"));
+				ExportTexture(&chk, dirpath / std::filesystem::u8path(name + ".png"));
 			}
 		}
 	}
@@ -1704,7 +1704,7 @@ void IGSounds()
 
 					auto& wavObj = g_scene.audioMgr.audioObjects[wavObjId];
 					wavObj = std::make_shared<WaveAudioObject>();
-					g_scene.audioMgr.audioNames[wavObjId] = fpath.filename().string(); // TODO: should it be ANSI or UTF-8 ???
+					g_scene.audioMgr.audioNames[wavObjId] = fpath.filename().u8string(); // TODO: should it be ANSI or UTF-8 ???
 
 					Chunk& chk = g_scene.wavPack.subchunks.emplace_back();
 					chk.tag = 'WPCM';
@@ -1739,8 +1739,8 @@ void IGSounds()
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Export")) {
-		const char* sndName = g_scene.audioMgr.audioNames[selectedSoundId].c_str();
-		auto fpath = GuiUtils::SaveDialogBox("Sound Wave file (*.wav)\0*.WAV\0\0\0", "wav", std::filesystem::path(sndName).filename());
+		const auto& sndName = g_scene.audioMgr.audioNames[selectedSoundId];
+		auto fpath = GuiUtils::SaveDialogBox("Sound Wave file (*.wav)\0*.WAV\0\0\0", "wav", std::filesystem::u8path(sndName).filename());
 		if (!fpath.empty()) {
 			Chunk& chk = g_scene.wavPack.subchunks[selectedWaveIndex];
 			FILE* file;
@@ -1762,7 +1762,7 @@ void IGSounds()
 				if (ptr && ptr->getType() == WaveAudioObject::TYPEID) {
 					WaveAudioObject* wave = (WaveAudioObject*)ptr.get();
 					Chunk& chk = g_scene.wavPack.subchunks[getWaveDataIndex(wave)];
-					auto fpath = dirpath / std::filesystem::path(name).relative_path();
+					auto fpath = dirpath / std::filesystem::u8path(name).relative_path();
 					std::filesystem::create_directories(fpath.parent_path());
 					FILE* file;
 					_wfopen_s(&file, fpath.c_str(), L"wb");
