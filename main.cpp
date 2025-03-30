@@ -1271,9 +1271,10 @@ void IGObjectInfo()
 						//else
 						//	selobj->excChunk = nullptr;
 						InvalidateMesh(selobj->mesh.get());
-						UncacheAllTextures();
-						GlifyAllTextures();
 					}
+					// even when mesh import fails, new textures may be imported
+					UncacheAllTextures();
+					GlifyAllTextures();
 				}
 			}
 			ImGui::SameLine();

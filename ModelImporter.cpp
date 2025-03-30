@@ -20,6 +20,8 @@
 #include <windows.h>
 extern HWND hWindow;
 
+#include <fmt/format.h>
+
 #pragma pack(push, 1)
 struct BonePre {
 	uint16_t parentIndex, flags;
@@ -71,6 +73,10 @@ std::optional<std::pair<Mesh, std::optional<Chunk>>> ImportWithAssimp(const std:
 		int parent;
 	};
 	std::map<std::string, BoneInfo> boneMap;
+
+	static const int maxNumVertices = 16384; // more crashes the game (assert), as it converts 16-bit indices to 32-bit with sign extension! So we cannot use the last bit of the 16-bit index, and first bit is always 0.
+	static const int maxNumFaces = 10000; // game checks for that before drawing a mesh, and triggers an INT3 if max reached with assert message "Too many faces to store in visible buffer".
+	static const int maxNumWorkVertices = 4155; // size of stack-allocated buffer when game applies the skin anim to mesh
 
 	// Meshes
 	std::map<aiVector3D, int> dupVertMap;
@@ -133,6 +139,14 @@ std::optional<std::pair<Mesh, std::optional<Chunk>>> ImportWithAssimp(const std:
 				nextVertId += 1;
 			}
 		}
+		if (gmesh.getNumVertices() > maxNumVertices) {
+			std::string msg = fmt::format(
+				"The imported model has {} vertices, which is more than the game's maximum limit of {} vertices.\n\n"
+				"Please reduce the vertex count of your model and try again.",
+				gmesh.getNumVertices(), maxNumVertices);
+			MessageBoxA(hWindow, msg.c_str(), "Import Error", 16);
+			return std::nullopt;
+		}
 
 		// Faces (indices + UVs)
 		bool hasTextureCoords = amesh->HasTextureCoords(0) && texId != 0xFFFF;
@@ -180,6 +194,16 @@ std::optional<std::pair<Mesh, std::optional<Chunk>>> ImportWithAssimp(const std:
 			}
 		}
 
+		if (gmesh.ftxFaces.size() > maxNumFaces) {
+			std::string msg = fmt::format(
+				"The model has {} faces, which is greater than the game's limit of {} faces per mesh.\n\n"
+				"Please reduce the number of faces and try again.",
+				gmesh.ftxFaces.size(), maxNumFaces
+			);
+			MessageBoxA(hWindow, msg.c_str(), "Import Error", 16);
+			return std::nullopt;
+		}
+
 		// Bones
 		for (unsigned int b = 0; b < amesh->mNumBones; ++b) {
 			aiBone* abone = amesh->mBones[b];
@@ -189,8 +213,9 @@ std::optional<std::pair<Mesh, std::optional<Chunk>>> ImportWithAssimp(const std:
 					ws.weights[remap[abone->mWeights[w].mVertexId]] = abone->mWeights[w].mWeight;
 		}
 	}
-	if(boneMap.empty())
+	if (boneMap.empty()) {
 		return std::make_pair(std::move(gmesh), std::nullopt);
+	}
 	else {
 		// find the root bone node
 		auto findRootBoneNode = [&boneMap](aiNode* node, const auto& rec) -> aiNode* {
@@ -218,7 +243,7 @@ std::optional<std::pair<Mesh, std::optional<Chunk>>> ImportWithAssimp(const std:
 			ws.invBind = globMat.getInverse4x3();
 			ws.numChildren = node->mNumChildren;
 
-			int id = boneInfos.size();
+			int id = (int)boneInfos.size();
 			ws.parent = parent;
 			boneInfos.emplace_back(&it->first, &it->second);
 			for (size_t i = 0; i < node->mNumChildren; ++i)
@@ -237,10 +262,8 @@ std::optional<std::pair<Mesh, std::optional<Chunk>>> ImportWithAssimp(const std:
 		//Chunk& hpmo = excChunk.subchunks[1]; hpmo.tag = 'HPMO';
 		Chunk& vrmp = excChunk.subchunks[5]; vrmp.tag = 'VRMP';	// OK
 
-		int boneMap;
-
-		uint32_t numBones = boneInfos.size();
-		uint32_t numOriginalVertices = gmesh.getNumVertices();
+		uint32_t numBones = (uint32_t)boneInfos.size();
+		uint32_t numOriginalVertices = (uint32_t)gmesh.getNumVertices();
 
 		// HPTS: Bone vertex ranges
 
@@ -254,12 +277,23 @@ std::optional<std::pair<Mesh, std::optional<Chunk>>> ImportWithAssimp(const std:
 				auto it = gmesh.vertices.data() + 3 * oriVertexIndex;
 				Vector3 vec{ it[0], it[1], it[2] };
 				vec = vec.transform(boneInfo->invBind);
-				uint16_t workVertIndex = workVertices.size() / 3;
+				uint32_t workVertIndex = (uint32_t)workVertices.size() / 3;
 				workVertices.insert(workVertices.end(), (float*)vec.coord, (float*)vec.coord + 3);
 				oriToWorkMap[oriVertexIndex].emplace_back(workVertIndex, wWeight);
 			}
 			numWorkVertices += (uint16_t)boneInfo->weights.size(); // What if someone tries a model with > 64Ki weights?
 			*hptsPtr++ = numWorkVertices;
+		}
+		if (workVertices.size() / 3u > maxNumWorkVertices) {
+			std::string msg = fmt::format(
+				"The number of \"work\" vertices is more than the max limit of {2}.\n\n"
+				"Num model vertices: {0}\n"
+				"Num \"work\" vertices: {1}\n"
+				"Max \"work\" vertices: {2}\n\n"
+				"Please remove some vertices and/or reduce the bone weight count per vertex.",
+				numOriginalVertices, workVertices.size() / 3u, maxNumWorkVertices);
+			MessageBoxA(hWindow, msg.c_str(), "Import Error", 16);
+			return std::nullopt;
 		}
 		assert(workVertices.size() == 3 * numWorkVertices);
 		printf("numWorkVertices=%u, numOriginalVertices=%u\n", numWorkVertices, numOriginalVertices);
@@ -363,8 +397,6 @@ std::optional<std::pair<Mesh, std::optional<Chunk>>> ImportWithAssimp(const std:
 			*vrmpPtr++ = a;
 			*vrmpPtr++ = b;
 		}
-
-
 
 		return std::make_pair(std::move(gmesh), std::move(excChunk));
 	}
