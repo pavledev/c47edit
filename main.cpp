@@ -44,6 +44,9 @@
 #include <stb_image.h>
 #include <stb_image_write.h>
 
+#include <nlohmann/json.hpp>
+#include <fstream>
+
 GameObject* selobj = 0;
 Vector3 campos(0, 0, -50), camori(0,0,0);
 float camNearDist = 1.0f, camFarDist = 10000.0f;
@@ -2277,6 +2280,104 @@ void CmdNewScene()
 	}
 }
 
+std::filesystem::path GetExecutableDir()
+{
+	char buffer[MAX_PATH];
+
+	GetModuleFileNameA(nullptr, buffer, MAX_PATH);
+
+	return std::filesystem::path(buffer).parent_path();
+}
+
+nlohmann::json ExportMatrixFormatted(const Matrix& mat)
+{
+	return {
+		{ "rotation", {
+			{ "xAxis", {
+				{ "x", mat.m[0][0] }, { "y", mat.m[0][1] }, { "z", mat.m[0][2] }, { "w", mat.m[0][3] }
+			}},
+			{ "yAxis", {
+				{ "x", mat.m[1][0] }, { "y", mat.m[1][1] }, { "z", mat.m[1][2] }, { "w", mat.m[1][3] }
+			}},
+			{ "zAxis", {
+				{ "x", mat.m[2][0] }, { "y", mat.m[2][1] }, { "z", mat.m[2][2] }, { "w", mat.m[2][3] }
+			}}
+		}},
+		{ "position", {
+			{ "x", mat.m[3][0] }, { "y", mat.m[3][1] }, { "z", mat.m[3][2] }, { "w", mat.m[3][3] }
+		}}
+	};
+}
+
+void ExportGameObjectTree(GameObject* obj, const std::filesystem::path& baseExportPath, nlohmann::json& outJson)
+{
+	if (!obj)
+	{
+		return;
+	}
+
+	bool hasMesh = (obj->mesh != nullptr);
+	bool hasChildren = !obj->subobj.empty();
+
+	if (!hasMesh && !hasChildren)
+	{
+		return;
+	}
+
+	nlohmann::json j;
+
+	j["name"] = obj->name;
+	j["path"] = obj->getPath();
+
+	j["transform"] = ExportMatrixFormatted(obj->matrix);
+
+	if (hasMesh)
+	{
+		std::filesystem::path relPath = std::filesystem::path(obj->getPath());
+		std::filesystem::path outputFile = baseExportPath / relPath;
+
+		outputFile.replace_extension(".glb");
+
+		std::filesystem::create_directories(outputFile.parent_path());
+
+		ExportWithAssimp(*obj->mesh, outputFile.string(), obj->excChunk.get());
+
+		j["mesh"] = outputFile.lexically_relative(baseExportPath).string();
+	}
+
+	if (hasChildren)
+	{
+		for (GameObject* child : obj->subobj)
+		{
+			nlohmann::json childJson;
+
+			ExportGameObjectTree(child, baseExportPath, childJson);
+
+			if (!childJson.is_null())
+			{
+				j["children"].push_back(std::move(childJson));
+			}
+		}
+	}
+
+	outJson = std::move(j);
+}
+
+void CmdExportScene()
+{
+	std::filesystem::path exeDir = GetExecutableDir();
+	std::filesystem::path glbOutputPath = exeDir / "output" / "glb";
+	std::filesystem::create_directories(glbOutputPath);
+
+	nlohmann::json rootJson;
+
+	ExportGameObjectTree(g_scene.superroot, glbOutputPath, rootJson);
+
+	std::ofstream sceneFile(exeDir / "output" / "scene.json");
+
+	sceneFile << std::setw(2) << rootJson << std::endl;
+}
+
 #ifndef APPVEYOR
 int main(int argc, char* argv[])
 #else
@@ -2468,6 +2569,11 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, char *args, int winmode
 					ImGui::MenuItem("Audio objects", nullptr, &wndShowAudioObjects);
 					ImGui::MenuItem("ZDefines", nullptr, &wndShowZDefines);
 					ImGui::MenuItem("Pathfinder info", nullptr, &wndShowPathfinderInfo);
+
+					if (ImGui::MenuItem("Export scene"))
+					{
+						CmdExportScene();
+					}
 
 					ImGui::Separator();
 					auto& chunks = g_scene.remainingChunks;
